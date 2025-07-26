@@ -33,10 +33,31 @@ fn main() {
         command_name, command_args
     );
 
-    let mut child = Command::new(command_name)
-        .args(command_args)
-        .spawn()
-        .expect("Failed to execute command");
+    let mut child = match Command::new(command_name).args(command_args).spawn() {
+        Ok(child) => child,
+        Err(e) => {
+            #[cfg(windows)]
+            {
+                // Try with .cmd extension if not found and on Windows
+                let cmd_name = format!("{}.cmd", command_name);
+                match Command::new(&cmd_name).args(command_args).spawn() {
+                    Ok(child) => child,
+                    Err(_) => {
+                        eprintln!("Failed to execute command '{}': {}\nAlso tried '{}'.\nIs it installed and in your PATH?", command_name, e, cmd_name);
+                        std::process::exit(127);
+                    }
+                }
+            }
+            #[cfg(not(windows))]
+            {
+                eprintln!(
+                    "Failed to execute command '{}': {}\nIs it installed and in your PATH?",
+                    command_name, e
+                );
+                std::process::exit(127);
+            }
+        }
+    };
 
     let status = child.wait().expect("Failed to wait on child process");
 
